@@ -1,69 +1,184 @@
-const express = require("express");
+const express = require('express')
 const app = express();
-const port = process.env.PORT || 3001;
-const router = express.Router()
+const { Client } = require('@notionhq/client')
+const cors = require('cors')
 const path = require('path')
+const router = express.Router()
+
+var bodyParser = require('body-parser')
+var jsonParser = bodyParser.json()
+
+const corsOptions ={
+    origin:'*', 
+    credentials:true,            //access-control-allow-credentials:true
+    optionSuccessStatus:200,
+ }
+ 
+ app.use(cors(corsOptions)) // Use this after the variable declaration
+
+ app.use(function (req, res, next){
+    res.header('Access-Control-Allow-Origin', '*');
+    next()
+})
+
+
+const PORT = process.env.PORT || 3001;
+
 
 app.use(express.static(path.join(__dirname, '/')));
 
-
-//wapp.get("/", (req, res) => res.type('html').send(html));
-
 router.get('/', function(req, res) {
-  res.sendFile(path.join(__dirname + '/index.html'))
-  
+    res.sendFile(path.join(__dirname + '/index.html'))
+    
 })
 
-app.listen(port, () => console.log(`Example app listening on port ${port}!`));
+app.use('/', router)
 
 
-const html = `
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Hello from Render!</title>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-    <script>
-      setTimeout(() => {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          disableForReducedMotion: true
-        });
-      }, 500);
-    </script>
-    <style>
-      @import url("https://p.typekit.net/p.css?s=1&k=vnd5zic&ht=tk&f=39475.39476.39477.39478.39479.39480.39481.39482&a=18673890&app=typekit&e=css");
-      @font-face {
-        font-family: "neo-sans";
-        src: url("https://use.typekit.net/af/00ac0a/00000000000000003b9b2033/27/l?primer=7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191&fvd=n7&v=3") format("woff2"), url("https://use.typekit.net/af/00ac0a/00000000000000003b9b2033/27/d?primer=7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191&fvd=n7&v=3") format("woff"), url("https://use.typekit.net/af/00ac0a/00000000000000003b9b2033/27/a?primer=7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191&fvd=n7&v=3") format("opentype");
-        font-style: normal;
-        font-weight: 700;
-      }
-      html {
-        font-family: neo-sans;
-        font-weight: 700;
-        font-size: calc(62rem / 16);
-      }
-      body {
-        background: white;
-      }
-      section {
-        border-radius: 1em;
-        padding: 1em;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        margin-right: -50%;
-        transform: translate(-50%, -50%);
-      }
-    </style>
-  </head>
-  <body>
-    <section>
-      Hello from Render!
-    </section>
-  </body>
-</html>
-`
+app.listen(PORT, function name() {
+
+    console.log("Starting proxy at: " + PORT);
+    
+})
+
+
+app.get('/', function (req, res) {
+    request(
+        {url: 'https://api.chess.com/pub/player/sami181'},
+        (error, response, body) => {
+            if (error || response.statusCode !== 200) {
+                return res.status(500).json({ type: 'error', message: err.message });
+            }
+
+            res.json(JSON.parse(body))
+        }
+    )
+    
+})
+
+const notion = new Client({auth: "secret_Q9yioL3FNmSl7AsFL8JKwkeoUoUnoV8jsIJHfRxlZIM"});
+
+const databaseid = "7b1833b8cd2844fe880b6c2437910d3f";
+
+
+async function queryDB(gameUrl) {
+    const response = await notion.databases.query({
+        database_id: databaseid,
+        filter: {
+            or: [
+                {
+                    property: 'Link',
+                    url: {
+                        contains: gameUrl,
+                    },
+                }
+            ],
+        }
+    });
+
+    return response
+}
+
+async function postInDB(game) {
+
+    const response = await notion.pages.create({
+        parent: {database_id: databaseid},
+        properties:{
+            "Game":{
+                title:[
+                    {
+                        text:{
+                            content: game.gameTitle
+                        }
+                    }
+                ]
+            },
+            "Winner":{
+                select:{
+                    
+                    name: game.winnerPlayer
+
+                }
+                
+            },
+            "Defeated":{
+                select:{
+                    
+                    name: game.defeatedPlayer
+
+                }
+                
+            },
+            "Date":{
+
+                date:{
+                    
+                    start: game.date, //"2022-10-29T11:00:00.000-04:00"
+                    time_zone: "America/Guayaquil"
+                }
+                
+            },
+            "Termination":{
+                select:{
+                    
+                    name: game.termination
+
+                }
+            },
+            "Link":{
+                url: game.url
+            },
+            "White Player":{
+                select:{
+                    
+                    name: game.whitePlayer
+
+                }
+                
+            },
+            "Black Player":{
+                select:{
+                    
+                    name: game.blackPlayer
+
+                }
+                
+            }
+        }
+    })
+    
+}
+
+
+app.post('/', jsonParser, async function (req, res) {
+
+    const game = req.body
+
+    console.log(game)
+
+    if (!game) {
+        return res.status(400).send({status: 'failed'})
+    }
+    res.status(200).send({status: 'recived'})
+
+    try {
+
+        let notionQuery = queryDB(game.url)
+
+        if((await notionQuery).results.length <= 0)
+        {
+            postInDB(game)
+            console.log("SUCCESS")
+
+        }else{
+
+            console.log("UNABLE TO POST BY DUPLICATE")
+
+        }
+
+    } catch (error) {
+        console.log(error)
+    }
+    
+})
+
